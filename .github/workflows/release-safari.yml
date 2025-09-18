@@ -1,0 +1,78 @@
+name: Release Safari Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (overrides current ref when provided)
+        required: false
+      notes:
+        description: Release notes override
+        required: false
+
+jobs:
+  build-and-release:
+    name: Build & Publish Safari Artifacts
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve tag
+        id: vars
+        run: |
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          else
+            echo "::error::Tag name is required when running manually."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.vars.outputs.tag }}
+
+      - name: Set node lts/*
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: |
+            - args: [--frozen-lockfile]
+
+      - name: Build Safari bundle
+        run: pnpm build-safari
+
+      - name: Generate Safari Xcode project
+        run: pnpm convert-safari -- --force
+
+      - name: Package Safari bundle
+        run: |
+          cd extension-safari
+          zip -q -r ../extension-safari.zip .
+
+      - name: Package Safari macOS project
+        run: |
+          cd extension-safari-macos
+          zip -q -r ../extension-safari-macos.zip .
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: ${{ steps.vars.outputs.tag }}
+          body: ${{ github.event.inputs.notes || '' }}
+          files: |
+            extension-safari.zip
+            extension-safari-macos.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
