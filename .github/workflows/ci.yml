@@ -101,8 +101,11 @@ jobs:
       - name: Build Safari bundle
         run: pnpm build-safari
 
+      - name: Clean previous Safari artifacts
+        run: rm -rf extension-safari-macos extension-safari-macos.zip
+
       - name: Generate Safari Xcode project
-        run: pnpm convert-safari -- --force
+        run: pnpm convert-safari
 
       - name: Package Safari bundle
         run: |
